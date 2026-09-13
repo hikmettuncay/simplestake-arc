@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleStake DApp</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --primary-color: #6366f1;
+            --primary-hover: #4f46e5;
+            --text-color: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --success-color: #22c55e;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 480px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        #connectWalletBtn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #connectWalletBtn:hover {
+            background-color: var(--primary-hover);
+        }
+        .info-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .info-box p {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 4px;
+        }
+        .info-box h2 {
+            font-size: 1.75rem;
+            color: var(--success-color);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        input {
+            width: 100%;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            color: white;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border-color: var(--primary-color);
+        }
+        .btn-row {
+            display: flex;
+            gap: 12px;
+        }
+        .action-btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            transition: opacity 0.2s;
+        }
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+        #stakeBtn {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        #withdrawBtn {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+        #withdrawBtn:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        #status {
+            margin-top: 16px;
+            text-align: center;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>SimpleStake</h1>
+            <button id="connectWalletBtn" onclick="connectWallet()">Cüzdan Bağla</button>
+        </header>
+
+        <div class="info-box">
+            <p>Stake Edilen Bakiyeniz</p>
+            <h2 id="stakedBalanceDisplay">0.0 STK</h2>
+        </div>
+
+        <div class="form-group">
+            <label for="amountInput">Miktar</label>
+            <input type="number" id="amountInput" placeholder="0.0" min="0" step="any">
+        </div>
+
+        <div class="btn-row">
+            <button id="stakeBtn" class="action-btn" onclick="stakeTokens()">Stake Et</button>
+            <button id="withdrawBtn" class="action-btn" onclick="withdrawTokens()">Çek (Withdraw)</button>
+        </div>
+
+        <div id="status">Lütfen MetaMask cüzdanınızı bağlayın.</div>
+    </div>
+
+    <script>
+        //0xF4E5EB6a3dc455aE82fb4539142746E21592e81B
+        const CONTRACT_ADDRESS = "0xF4E5EB6a3dc455aE82fb4539142746E21592e81B";
+        // SimpleStake Sözleşme ABI'si
+        const CONTRACT_ABI = [
+            {
+                "inputs": [{"internalType": "address", "name": "_stakingToken", "type": "address"}],
+                "stateMutability": "nonpayable",
+                "type": "constructor"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {"indexed": true, "internalType": "address", "name": "user", "type": "address"},
+                    {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"}
+                ],
+                "name": "Staked",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {"indexed": true, "internalType": "address", "name": "user", "type": "address"},
+                    {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"}
+                ],
+                "name": "Withdrawn",
+                "type": "event"
+            },
+            {
+                "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+                "name": "stakedBalance",
+                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "stakingToken",
+                "outputs": [{"internalType": "contract IERC20", "name": "", "type": "address"}],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+                "name": "stake",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+                "name": "withdraw",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+
+        let provider;
+        let signer;
+        let contract;
+        let userAddress;
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    signer = provider.getSigner();
+                    userAddress = await signer.getAddress();
+                    
+                    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+                    document.getElementById("connectWalletBtn").innerText = userAddress.substring(0, 6) + "..." + userAddress.substring(38);
+                    document.getElementById("status").innerText = "Cüzdan bağlandı.";
+                    
+                    await updateBalance();
+                } catch (error) {
+                    console.error(error);
+                    document.getElementById("status").innerText = "Cüzdan bağlantısı reddedildi.";
+                }
+            } else {
+                alert("Lütfen MetaMask tarayıcı eklentisini yükleyin!");
+            }
+        }
+
+        async function updateBalance() {
+            try {
+                const balance = await contract.stakedBalance(userAddress);
+                document.getElementById("stakedBalanceDisplay").innerText = ethers.utils.formatEther(balance) + " STK";
+            } catch (error) {
+                console.error("Bakiye okunamadı:", error);
+            }
+        }
+
+        async function stakeTokens() {
+            const amountVal = document.getElementById("amountInput").value;
+            if (!amountVal || amountVal <= 0) {
+                alert("Lütfen geçerli bir miktar girin.");
+                return;
+            }
+            try {
+                document.getElementById("status").innerText = "İşlem cüzdanda onay bekliyor...";
+                const parsedAmount = ethers.utils.parseEther(amountVal);
+                const tx = await contract.stake(parsedAmount);
+                document.getElementById("status").innerText = "İşlem blok zincirine gönderildi, bekleniyor...";
+                await tx.wait();
+                document.getElementById("status").innerText = "Stake işlemi başarılı!";
+                await updateBalance();
+            } catch (error) {
+                console.error(error);
+                document.getElementById("status").innerText = "Hata: " + (error.data?.message || error.message);
+            }
+        }
+
+        async function withdrawTokens() {
+            const amountVal = document.getElementById("amountInput").value;
+            if (!amountVal || amountVal <= 0) {
+                alert("Lütfen geçerli bir miktar girin.");
+                return;
+            }
+            try {
+                document.getElementById("status").innerText = "Çekim işlemi cüzdanda onay bekliyor...";
+                const parsedAmount = ethers.utils.parseEther(amountVal);
+                const tx = await contract.withdraw(parsedAmount);
+                document.getElementById("status").innerText = "Çekim işlemi blok zincirine gönderildi, bekleniyor...";
+                await tx.wait();
+                document.getElementById("status").innerText = "Çekim işlemi başarılı!";
+                await updateBalance();
+            } catch (error) {
+                console.error(error);
+                document.getElementById("status").innerText = "Hata: " + (error.data?.message || error.message);
+            }
+        }
+    </script>
+</body>
+</html>
